@@ -3,7 +3,7 @@ use pixels::{Pixels, SurfaceTexture};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{WindowEvent, ElementState, MouseButton},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
@@ -14,8 +14,8 @@ mod black_hole;
 mod renderer_2d;
 
 use black_hole::BlackHole;
-use vec::Vec2;
-use ray::Ray; // Am adăugat Ray aici
+use vec::Vec3;
+use ray::Ray;
 
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 800;
@@ -24,21 +24,25 @@ struct App {
     window: Option<Arc<Window>>,
     pixels: Option<Pixels<'static>>,
     bh: BlackHole,
-    rays: Vec<Ray>,
-    first_frame: bool,
+    paths: Vec<Vec<Vec3>>, //whole trajectory
+    time_step: usize,
+
+    camera_yaw: f64,
+    camera_pitch: f64,
+    mouse_held: bool,
+    last_mouse_pos: Option<(f64, f64)>,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             let window_attributes = Window::default_attributes()
-                .with_title("Black Hole Sim - Real Time")
+                .with_title("Black Hole 3D - Continuous Engine")
                 .with_inner_size(LogicalSize::new(WIDTH, HEIGHT))
                 .with_resizable(false);
 
             let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
             let size = window.inner_size();
-
             let surface = SurfaceTexture::new(size.width, size.height, window.clone());
             let pixels = Pixels::new(WIDTH, HEIGHT, surface).unwrap();
 
@@ -54,21 +58,41 @@ impl ApplicationHandler for App {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::CloseRequested => {
-                event_loop.exit();
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::MouseInput { state, button, .. } => {
+                if button == MouseButton::Left {
+                    self.mouse_held = state == ElementState::Pressed;
+                    if !self.mouse_held {
+                        self.last_mouse_pos = None;
+                    }
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                if self.mouse_held {
+                    if let Some((last_x, last_y)) = self.last_mouse_pos {
+                        let dx = position.x - last_x;
+                        let dy = position.y - last_y;
+                        self.camera_yaw -= dx * 0.01;
+                        self.camera_pitch -= dy * 0.01;
+                    }
+                    self.last_mouse_pos = Some((position.x, position.y));
+                }
             }
             WindowEvent::RedrawRequested => {
-                if let Some(pixels) = self.pixels.as_mut() {
+                // 15 steps redraw
+                self.time_step += 15;
 
+                if let Some(pixels) = self.pixels.as_mut() {
                     renderer_2d::render(
                         pixels.frame_mut(),
                         WIDTH,
                         HEIGHT,
                         &self.bh,
-                        &mut self.rays,
-                        self.first_frame,
+                        &self.paths,
+                        self.time_step,
+                        self.camera_yaw,
+                        self.camera_pitch,
                     );
-                    self.first_frame = false;
 
                     if pixels.render().is_err() {
                         event_loop.exit();
@@ -80,6 +104,7 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // Cerem sistemului sa randeze non-stop cat de repede poate
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
         }
@@ -89,23 +114,46 @@ impl ApplicationHandler for App {
 fn main() {
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
-    let mut rays = Vec::new();
-    let num_rays = 150;
-    let ray_dir = Vec2::new(1.0, 0.0);
+
+    let bh = BlackHole::new(5.0, Vec3::new(0.0, 0.0, 0.0));
+    let mut paths = Vec::new();
+    let num_rays_y = 40;
+    let num_rays_z = 40;
+    let ray_dir = Vec3::new(1.0, 0.0, 0.0);
     let world_half = 20.0;
 
-    for i in 0..num_rays {
-        let normalized_y = i as f64 / (num_rays - 1) as f64;
-        let start_y = (normalized_y - 0.5) * 2.0 * world_half;
-        rays.push(Ray::new(Vec2::new(-world_half * 0.95, start_y), ray_dir));
+    //everything calculated at the beninging
+    for i in 0..num_rays_y {
+        for j in 0..num_rays_z {
+            let normalized_y = i as f64 / (num_rays_y - 1) as f64;
+            let normalized_z = j as f64 / (num_rays_z - 1) as f64;
+            let start_y = (normalized_y - 0.5) * 2.0 * world_half;
+            let start_z = (normalized_z - 0.5) * 2.0 * world_half;
+
+            let mut ray = Ray::new(Vec3::new(-world_half * 1.5, start_y, start_z), ray_dir);
+            let mut path = Vec::with_capacity(2000); // Rezervam memorie pentru eficienta
+
+            for _ in 0..2000 {
+                path.push(ray.pos);
+                let r = (ray.pos - bh.position).length();
+                if r < bh.schwarzschild_radius || r > 50.0 { break; }
+                ray = ray::rk4_step(&ray, &bh, 0.05);
+            }
+            paths.push(path);
+        }
     }
+    println!("Fizica gata! Pornesc motorul de randare.");
 
     let mut app = App {
         window: None,
         pixels: None,
-        bh: BlackHole::new(5.0, Vec2::new(0.0, 0.0)),
-        rays,
-        first_frame: true,
+        bh,
+        paths,
+        time_step: 0,
+        camera_yaw: 0.0,
+        camera_pitch: 0.0,
+        mouse_held: false,
+        last_mouse_pos: None,
     };
 
     event_loop.run_app(&mut app).unwrap();
