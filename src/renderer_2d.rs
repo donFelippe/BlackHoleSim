@@ -8,7 +8,8 @@ pub fn render(
     width: u32,
     height: u32,
     bh: &BlackHole,
-    paths: &[Vec<Vec3>],
+    // Acum paths contine si culoarea calculata de noi
+    paths: &[(Vec<Vec3>, [u8; 3])],
     time_step: usize,
     yaw: f64,
     pitch: f64,
@@ -16,7 +17,6 @@ pub fn render(
     let w = width as f64;
     let h = height as f64;
 
-    // Stergem ecranul COMPLET la fiecare cadru
     for pixel in frame.chunks_exact_mut(4) {
         pixel[0] = 5;
         pixel[1] = 5;
@@ -47,17 +47,15 @@ pub fn render(
         }
     };
 
-    // Desenam Singularitatea
-    draw_point_3d(bh.position, [255, 50, 50]);
+    // Desenam Singularitatea ca un simplu punct de referinta
+    draw_point_3d(bh.position, [255, 255, 255]);
 
-    // Randam traiectoriile pre-calculate pana la 'time_step'
-    for path in paths {
+    // Desenam traseele folosind culoarea lor unica
+    for (path, color) in paths {
         let steps_to_draw = path.len().min(time_step);
 
         for i in 0..steps_to_draw {
-            let pos = path[i];
-            let depth_color = ((pos.z / 20.0 + 0.5).clamp(0.0, 1.0) * 255.0) as u8;
-            draw_point_3d(pos, [255, 200, depth_color]);
+            draw_point_3d(path[i], *color);
         }
     }
 }
