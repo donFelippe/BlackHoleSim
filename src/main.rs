@@ -45,6 +45,7 @@ impl ApplicationHandler for App {
             let size = window.inner_size();
 
             let surface = SurfaceTexture::new(size.width, size.height, window.clone());
+            // Dar aici buffer-ul de pixeli ramane mic (400x400)
             let pixels = Pixels::new(WIDTH, HEIGHT, surface).unwrap();
 
             window.request_redraw();
@@ -77,6 +78,7 @@ impl ApplicationHandler for App {
                         self.camera_yaw -= dx * 0.005; // Sensibilitate ajustata
                         self.camera_pitch -= dy * 0.005;
 
+                        // Cand miscam mouse-ul, cerem un cadru nou!
                         if let Some(window) = self.window.as_ref() {
                             window.request_redraw();
                         }
@@ -107,14 +109,14 @@ impl ApplicationHandler for App {
 
 fn main() {
     let event_loop = EventLoop::new().unwrap();
-    event_loop.set_control_flow(ControlFlow::Wait); // Procesorul se odihneste cand nu misti nimic
+    event_loop.set_control_flow(ControlFlow::Wait); // Procesorul se odihneste cand nu misti mouse-ul!
 
     let mut app = App {
         window: None,
         pixels: None,
         bh: BlackHole::new(5.0, Vec3::new(0.0, 0.0, 0.0)),
         camera_yaw: 0.0,
-        camera_pitch: 0.1,
+        camera_pitch: 0.1, // Ne uitam putin de sus
         mouse_held: false,
         last_mouse_pos: None,
     };
