@@ -66,12 +66,12 @@ fn trace_ray(ray: &mut Ray, bh: &BlackHole) -> [u8; 3] {
     for _ in 0..max_steps {
         let r = ray.pos.length();
 
-        // 1. Daca e inghitit de singularitate
+        // Singularity
         if r < rs {
             return [final_color[0].min(255.0) as u8, final_color[1].min(255.0) as u8, final_color[2].min(255.0) as u8];
         }
 
-        // 2. Daca a evadat in spatiul adanc (am marit distanta de evadare)
+        // Deep space 
         if r > 100.0 {
             let bg = background_shader(ray.vel);
             if hit_disk {
@@ -88,7 +88,6 @@ fn trace_ray(ray: &mut Ray, bh: &BlackHole) -> [u8; 3] {
 
         let next_ray = rk4_step(ray, bh, dt);
 
-        // 3. Calculam intersectia transparenta cu Discul
         if ray.pos.y * next_ray.pos.y < 0.0 {
             let t = ray.pos.y.abs() / (ray.pos.y.abs() + next_ray.pos.y.abs());
             let hit_pos = ray.pos + (next_ray.pos - ray.pos) * t;
@@ -97,8 +96,6 @@ fn trace_ray(ray: &mut Ray, bh: &BlackHole) -> [u8; 3] {
             if hit_r > disk_inner && hit_r < disk_outer {
                 let intensity = 1.0 - ((hit_r - disk_inner) / (disk_outer - disk_inner));
 
-                // Am adaugat un factor de 0.8 pentru a face discul usor transparent
-                // Asta permite ca lumina de pe partea din spate sa se adune curat cu cea din fata
                 final_color[0] += 255.0 * 0.8;
                 final_color[1] += (180.0 * intensity + 50.0) * 0.8;
                 final_color[2] += (50.0 * intensity) * 0.8;
