@@ -1,0 +1,57 @@
+name: Build and Publish Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            executable_name: BlackHoleSim
+            asset_name: BlackHoleSim-linux-x86_64
+          - os: windows-latest
+            executable_name: BlackHoleSim.exe
+            asset_name: BlackHoleSim-windows-x86_64.exe
+          - os: macos-latest
+            executable_name: BlackHoleSim
+            asset_name: BlackHoleSim-mac-x86_64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      #  winit and pixels require these to compile on Linux
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+      - name: Build the app
+        run: cargo build --release
+
+      - name: Rename file for Linux/Mac
+        if: matrix.os != 'windows-latest'
+        run: mv target/release/${{ matrix.executable_name }} ${{ matrix.asset_name }}
+
+      - name: Rename file for Windows
+        if: matrix.os == 'windows-latest'
+        run: move target\release\${{ matrix.executable_name }} ${{ matrix.asset_name }}
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
